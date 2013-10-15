@@ -131,6 +131,18 @@ int librados::RadosClient::get_fsid(std::string *s)
   return 0;
 }
 
+int librados::RadosClient::ping_monitor(const string mon_id, string *result)
+{
+  MonClient ping_monc(cct);
+  int err = ping_monc.build_initial_monmap();
+  if (err < 0) {
+    return err;
+  }
+
+  err = ping_monc.ping_monitor(mon_id, result);
+  return err;
+}
+
 int librados::RadosClient::connect()
 {
   common_init_finish(cct);
