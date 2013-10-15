@@ -356,6 +356,17 @@ Rados object in state %s." % (self.state))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
 
+    def ping_monitor(self, mon_id):
+      self.require_state("configuring", "connected")
+      ret_buf = create_string_buffer(10000)
+      ret = run_in_thread(self.librados.rados_ping_monitor,
+                          (self.cluster, c_char_p(mon_id),
+                           ret_buf, c_size_t(10000)))
+      if (ret != 0):
+        raise make_ex(ret, "error calling ping_monitor")
+      else:
+        return (ret, ret_buf.value)
+
     def connect(self, timeout=0):
         """
         Connect to the cluster.
