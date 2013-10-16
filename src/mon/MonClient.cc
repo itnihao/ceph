@@ -22,6 +22,7 @@
 #include "messages/MAuthReply.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MPing.h"
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
@@ -163,6 +164,51 @@ int MonClient::get_monmap_privately()
   return -1;
 }
 
+int MonClient::ping_monitor(string mon_id, string *result_reply)
+{
+  ldout(cct, 10) << __func__ << dendl;
+
+  if (mon_id.empty()) {
+    ldout(cct, 10) << __func__ << " specified mon id is empty!" << dendl;
+    return -EINVAL;
+  } else if (!monmap.contains(mon_id)) {
+    ldout(cct, 10) << __func__ << " no such monitor 'mon." << mon_id << "'"
+                   << dendl;
+    return -ENOENT;
+  }
+
+  MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
+
+  Messenger *smsgr = new SimpleMessenger(cct,
+                                         entity_name_t::CLIENT(-1),
+                                         "temp_ping_client", getpid());
+  smsgr->add_dispatcher_head(pinger);
+  smsgr->start();
+
+  cur_mon = mon_id;
+  cur_con = smsgr->get_connection(monmap.get_inst(cur_mon));
+  ldout(cct, 10) << __func__ << " ping mon." << cur_mon
+                 << " " << cur_con->get_peer_addr() << dendl;
+  smsgr->send_message(new MPing, cur_con);
+
+  pinger->lock.Lock();
+  int ret = pinger->wait_for_reply(cct->_conf->client_mount_timeout);
+  if (ret == 0) {
+    ldout(cct,10) << __func__ << " got ping reply" << dendl;
+  } else {
+    ret = -ret;
+  }
+  pinger->lock.Unlock();
+
+  smsgr->mark_down(cur_con);
+  cur_con.reset(NULL);
+  cur_mon.clear();
+  smsgr->shutdown();
+  smsgr->wait();
+  delete smsgr;
+  delete pinger;
+  return ret;
+}
 
 bool MonClient::ms_dispatch(Message *m)
 {
