@@ -578,7 +578,24 @@ def main():
         return 1
 
     try:
-        cluster_handle.connect()
+        if len(childargs) >= 2 and childargs[0] == 'ping':
+            if 'mon.' not in childargs[1]:
+                print >> sys.stderr, '"ping" expects a monitor to ping; try "ping mon.<id>"'
+                return 1
+
+            mon_id = childargs[1][len('mon.'):]
+            (r,s) = cluster_handle.ping_monitor(mon_id)
+            if r == 0:
+                print s
+                return 0
+            elif r == -errno.ETIMEDOUT:
+                print >> sys.stderr, 'Timed out attempting to connect to monitor'
+                return 1
+            else:
+                print >> sys.stderr, 'Error connecting to monitor: {0}'.format(r)
+                return 1
+        else:
+            cluster_handle.connect()
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
